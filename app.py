@@ -4,26 +4,19 @@ import os
 import json
 from datetime import datetime
 import requests
-import psycopg2
 
 # === ŁADOWANIE ZMIENNYCH ENV ===
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 BACKEND_URL = os.getenv("BACKEND_URL")
-DATABASE_URL = (
-    os.getenv("DATABASE_PRIVATE_URL")
-    or os.getenv("RAILWAY_PRIVATE_URL")
-    or os.getenv("DATABASE_URL")
-    or os.getenv("DATABASE_PUBLIC_URL")
-)
 DATA_FILE = "verific_data.json"
 REDIRECT_URI = f"{BACKEND_URL}/callback"
 
 if not CLIENT_ID or not CLIENT_SECRET or not BACKEND_URL:
     raise RuntimeError("❌ Brak wymaganych zmiennych środowiskowych!")
 
-# Backup JSON – fallback jeśli brak DB
+# === Backup JSON – fallback jeśli brak bazy ===
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
@@ -36,9 +29,10 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# === Flask app ===
 app = Flask(__name__)
 
-# Statyczny serwer plików (np. tło)
+# Serwowanie tła (obraz w katalogu obok app.py)
 @app.route('/<path:filename>')
 def serve_static(filename):
     return send_from_directory('.', filename)
@@ -72,7 +66,7 @@ def callback():
     if not code:
         return "❌ Brak kodu", 400
 
-    # Wymiana kodu na token
+    # Wymiana kodu OAuth na access_token
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -88,7 +82,7 @@ def callback():
     if not access_token:
         return "❌ Błąd OAuth", 400
 
-    # Pobranie danych użytkownika
+    # Dane użytkownika
     headers = {"Authorization": f"Bearer {access_token}"}
     user = requests.get("https://discord.com/api/users/@me", headers=headers, timeout=5).json()
 
@@ -96,7 +90,7 @@ def callback():
     account_ts = ((user_id >> 22) + 1420070400000) / 1000
     days_old = (datetime.utcnow() - datetime.utcfromtimestamp(account_ts)).days
 
-    # Zapis do pliku JSON jako fallback
+    # Zapis w pliku (fallback)
     db = load_data()
     db[state_token] = {
         "discord_id": str(user_id),
@@ -106,12 +100,12 @@ def callback():
     }
     save_data(db)
 
-    # Przygotowanie HTML-a
+    # Dynamiczny wygląd strony
     if days_old >= 3:
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
         button_text = "Wejdź na serwer"
-        button_link = "https://discord.gg/twoj_link"  # <--- Twój link do Discorda
+        button_link = "https://discord.gg/twoj_invite"  # Twój link zaproszenia
     else:
         status_text = "⛔ Twoje konto jest za młode!"
         status_color = "#d9534f"
@@ -143,12 +137,10 @@ def callback():
                 font-size: 3em;
                 color: {status_color};
                 margin-bottom: 20px;
-                animation: fadeIn 1s ease-in-out;
             }}
             h2 {{
                 font-size: 1.5em;
                 margin-bottom: 30px;
-                animation: fadeIn 1.5s ease-in-out;
             }}
             .button {{
                 background-color: {status_color};
@@ -162,10 +154,6 @@ def callback():
             }}
             .button:hover {{
                 transform: scale(1.1);
-            }}
-            @keyframes fadeIn {{
-                from {{ opacity: 0; transform: translateY(-20px); }}
-                to {{ opacity: 1; transform: translateY(0); }}
             }}
         </style>
     </head>
@@ -183,6 +171,6 @@ def status(user_id):
     db = load_data()
     return jsonify({"verified": db.get(user_id, {}).get("verified", False)})
 
-# Start dla Railway
+# Start lokalny i dla gunicorn
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

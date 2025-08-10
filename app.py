@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 import psycopg2
 
-# === ŁADOWANIE ENV ===
+# === ŁADOWANIE ZMIENNYCH ENV ===
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -23,11 +23,7 @@ REDIRECT_URI = f"{BACKEND_URL}/callback"
 if not CLIENT_ID or not CLIENT_SECRET or not BACKEND_URL:
     raise RuntimeError("❌ Brak wymaganych zmiennych środowiskowych!")
 
-# === DB Connection (opcjonalnie jeśli chcesz zapisywać w DB) ===
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=5)
-
-# Backup JSON
+# Backup JSON – fallback jeśli brak DB
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
@@ -40,10 +36,9 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# === Flask Setup ===
 app = Flask(__name__)
 
-# Route do serwowania tła
+# Statyczny serwer plików (np. tło)
 @app.route('/<path:filename>')
 def serve_static(filename):
     return send_from_directory('.', filename)
@@ -65,8 +60,8 @@ def verify():
     }
     save_data(db)
     oauth_url = (
-        f"https://discord.com/api/oauth2/authorize?client_id={CLIENT_ID}"
-        f"&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify&state={token}"
+        f"https://discord.com/api/oauth2/authorize?"
+        f"client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify&state={token}"
     )
     return redirect(oauth_url)
 
@@ -77,7 +72,7 @@ def callback():
     if not code:
         return "❌ Brak kodu", 400
 
-    # Wymiana kodu na access_token
+    # Wymiana kodu na token
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -93,43 +88,42 @@ def callback():
     if not access_token:
         return "❌ Błąd OAuth", 400
 
-    # Pobranie info o użytkowniku
+    # Pobranie danych użytkownika
     headers = {"Authorization": f"Bearer {access_token}"}
-    user_data = requests.get("https://discord.com/api/users/@me", headers=headers, timeout=5).json()
+    user = requests.get("https://discord.com/api/users/@me", headers=headers, timeout=5).json()
 
-    user_id = int(user_data["id"])
+    user_id = int(user["id"])
     account_ts = ((user_id >> 22) + 1420070400000) / 1000
     days_old = (datetime.utcnow() - datetime.utcfromtimestamp(account_ts)).days
 
-    # Zapis do JSON
+    # Zapis do pliku JSON jako fallback
     db = load_data()
     db[state_token] = {
         "discord_id": str(user_id),
-        "username": f"{user_data['username']}#{user_data['discriminator']}",
+        "username": f"{user['username']}#{user['discriminator']}",
         "days_old": days_old,
         "verified": days_old >= 3
     }
     save_data(db)
 
-    # Tekst i kolory w zależności od wyniku
+    # Przygotowanie HTML-a
     if days_old >= 3:
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
         button_text = "Wejdź na serwer"
-        button_link = "https://discord.gg/twoj_invite"  # <-- podmień na swój link
+        button_link = "https://discord.gg/twoj_link"  # <--- Twój link do Discorda
     else:
         status_text = "⛔ Twoje konto jest za młode!"
         status_color = "#d9534f"
         button_text = "Wyjdź"
         button_link = "https://discord.com/channels/@me"
 
-    # HTML „Zajebistej” strony
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
     <head>
         <meta charset="UTF-8">
-        <title>Weryfikacja Pizdzik</title>
+        <title>Weryfikacja</title>
         <style>
             body {{
                 margin: 0;
@@ -158,20 +152,16 @@ def callback():
             }}
             .button {{
                 background-color: {status_color};
-                border: none;
-                color: white;
                 padding: 20px 40px;
                 font-size: 24px;
                 border-radius: 10px;
-                cursor: pointer;
+                color: white;
                 text-decoration: none;
-                box-shadow: 0px 5px 15px rgba(0,0,0,0.5);
-                transition: transform 0.2s, background-color 0.3s;
-                animation: fadeIn 2s ease-in-out;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+                transition: transform 0.2s;
             }}
             .button:hover {{
                 transform: scale(1.1);
-                background-color: #222;
             }}
             @keyframes fadeIn {{
                 from {{ opacity: 0; transform: translateY(-20px); }}
@@ -193,5 +183,6 @@ def status(user_id):
     db = load_data()
     return jsonify({"verified": db.get(user_id, {}).get("verified", False)})
 
+# Start dla Railway
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

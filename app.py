@@ -119,7 +119,7 @@ def callback():
             body {{
                 margin: 0;
                 height: 100vh;
-                background: url('/nocne-rozkminy.jpeg') no-repeat center center fixed;
+                background: url('/nocne-rozkminy.jpg') no-repeat center center fixed;
                 background-size: cover;
                 display: flex;
                 flex-direction: column;

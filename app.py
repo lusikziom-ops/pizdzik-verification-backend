@@ -1,4 +1,4 @@
-from flask import Flask, request, redirect, jsonify, send_from_directory
+from flask import Flask, request, redirect, jsonify
 from dotenv import load_dotenv
 import os
 import json
@@ -16,26 +16,24 @@ REDIRECT_URI = f"{BACKEND_URL}/callback"
 if not CLIENT_ID or not CLIENT_SECRET or not BACKEND_URL:
     raise RuntimeError("❌ Brak wymaganych zmiennych środowiskowych!")
 
-# === Backup JSON – fallback jeśli brak bazy ===
+# === Backup JSON – jeśli nie istnieje ===
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
+
 
 def load_data():
     with open(DATA_FILE, "r") as f:
         return json.load(f)
 
+
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# === Flask app ===
-app = Flask(__name__)
 
-# Serwowanie tła (obraz w katalogu obok app.py)
-@app.route('/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('.', filename)
+# === Flask app ===
+app = Flask(__name__, static_url_path='/static')
 
 @app.route("/")
 def home():
@@ -58,6 +56,7 @@ def verify():
         f"client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&scope=identify&state={token}"
     )
     return redirect(oauth_url)
+
 
 @app.route("/callback")
 def callback():
@@ -82,7 +81,7 @@ def callback():
     if not access_token:
         return "❌ Błąd OAuth", 400
 
-    # Dane użytkownika
+    # Dane użytkownika z Discord API
     headers = {"Authorization": f"Bearer {access_token}"}
     user = requests.get("https://discord.com/api/users/@me", headers=headers, timeout=5).json()
 
@@ -90,7 +89,7 @@ def callback():
     account_ts = ((user_id >> 22) + 1420070400000) / 1000
     days_old = (datetime.utcnow() - datetime.utcfromtimestamp(account_ts)).days
 
-    # Zapis w pliku (fallback)
+    # Zapis do pliku
     db = load_data()
     db[state_token] = {
         "discord_id": str(user_id),
@@ -105,72 +104,105 @@ def callback():
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
         button_text = "Wejdź na serwer"
-        button_link = "https://discord.gg/twoj_invite"  # Twój link zaproszenia
+        button_link = "https://discord.gg/twoj_invite"  # Wstaw swój link zaproszenia
+        sub_message = "Twoje konto wygląda na wiarygodne. Zapraszamy!"
     else:
         status_text = "⛔ Twoje konto jest za młode!"
         status_color = "#d9534f"
-        button_text = "Wyjdź"
+        button_text = "Powrót"
         button_link = "https://discord.com/channels/@me"
+        sub_message = "Potrzebujemy kont o dłuższym stażu, spróbuj ponownie później."
 
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
     <head>
         <meta charset="UTF-8">
-        <title>Weryfikacja</title>
+        <title>Weryfikacja konta Discord</title>
         <style>
-            body {{
+            * {{
+                box-sizing: border-box;
                 margin: 0;
+                padding: 0;
+            }}
+            body {{
                 height: 100vh;
-                background: url('/nocne-rozkminy.jpg') no-repeat center center fixed;
-                background-size: cover;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                background: linear-gradient(135deg, rgba(15,15,30,0.95), rgba(30,30,60,0.95)),
+                            url('/static/nocne-rozkminy.jpg') center/cover no-repeat fixed;
                 display: flex;
-                flex-direction: column;
                 justify-content: center;
                 align-items: center;
-                font-family: Arial, sans-serif;
-                color: white;
-                text-shadow: 2px 2px 5px rgba(0,0,0,0.8);
-                backdrop-filter: brightness(0.7);
+                color: #fff;
+            }}
+            .card {{
+                background: rgba(255, 255, 255, 0.08);
+                padding: 40px;
+                border-radius: 15px;
+                text-align: center;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                max-width: 450px;
+                width: 90%;
+                backdrop-filter: blur(8px);
+                animation: fadeIn 0.6s ease-out;
             }}
             h1 {{
-                font-size: 3em;
+                font-size: 2.4em;
                 color: {status_color};
-                margin-bottom: 20px;
+                margin-bottom: 15px;
             }}
-            h2 {{
-                font-size: 1.5em;
-                margin-bottom: 30px;
+            p {{
+                margin-bottom: 25px;
+                font-size: 1.1em;
+                line-height: 1.4em;
+                opacity: 0.9;
             }}
-            .button {{
-                background-color: {status_color};
-                padding: 20px 40px;
-                font-size: 24px;
-                border-radius: 10px;
-                color: white;
+            .days {{
+                font-size: 1.2em;
+                margin-bottom: 25px;
+                font-weight: 500;
+                color: #ddd;
+            }}
+            a.button {{
+                background: {status_color};
+                padding: 15px 35px;
+                font-size: 1.2em;
+                border-radius: 8px;
+                color: #fff;
                 text-decoration: none;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-                transition: transform 0.2s;
+                font-weight: bold;
+                display: inline-block;
+                transition: all 0.2s ease-in-out;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
             }}
-            .button:hover {{
-                transform: scale(1.1);
+            a.button:hover {{
+                transform: translateY(-3px) scale(1.05);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+            }}
+            @keyframes fadeIn {{
+                from {{ opacity: 0; transform: translateY(10px); }}
+                to {{ opacity: 1; transform: translateY(0); }}
             }}
         </style>
     </head>
     <body>
-        <h1>{status_text}</h1>
-        <h2>Twoje konto ma {days_old} dni.</h2>
-        <a href="{button_link}" class="button">{button_text}</a>
+        <div class="card">
+            <h1>{status_text}</h1>
+            <p>{sub_message}</p>
+            <div class="days">Twoje konto ma <strong>{days_old}</strong> dni.</div>
+            <a href="{button_link}" class="button">{button_text}</a>
+        </div>
     </body>
     </html>
     """
     return html
+
 
 @app.route("/status/<user_id>")
 def status(user_id):
     db = load_data()
     return jsonify({"verified": db.get(user_id, {}).get("verified", False)})
 
-# Start lokalny i dla gunicorn
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

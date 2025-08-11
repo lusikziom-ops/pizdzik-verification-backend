@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 from urllib.parse import quote_plus
 
-# === ŁADOWANIE ZMIENNYCH ENV ===
+# === ŁADOWANIE ENV ===
 load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
@@ -17,7 +17,7 @@ REDIRECT_URI = f"{BACKEND_URL}/callback"
 if not CLIENT_ID or not CLIENT_SECRET or not BACKEND_URL:
     raise RuntimeError("❌ Brak wymaganych zmiennych środowiskowych!")
 
-# === Backup JSON – fallback jeśli brak bazy ===
+# === JSON fallback ===
 if not os.path.exists(DATA_FILE):
     with open(DATA_FILE, "w") as f:
         json.dump({}, f)
@@ -30,10 +30,10 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# === Flask app ===
+# === APP ===
 app = Flask(__name__, static_url_path='/static')
 
-# Serwowanie plików statycznych (np. tła nocne-rozkminy.jpg)
+# Serwowanie statycznych (np. tła)
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
@@ -55,7 +55,6 @@ def verify():
     }
     save_data(db)
 
-    # Zakodowany redirect_uri
     encoded_redirect = quote_plus(REDIRECT_URI)
     oauth_url = (
         f"https://discord.com/api/oauth2/authorize?"
@@ -73,7 +72,7 @@ def callback():
     if not code:
         return "❌ Brak kodu", 400
 
-    # --- Wymiana kodu OAuth na access_token ---
+    # TOKEN
     data = {
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
@@ -94,7 +93,7 @@ def callback():
     if not access_token:
         return "❌ Błąd OAuth", 400
 
-    # --- Pobranie danych użytkownika ---
+    # Dane użytkownika
     headers = {"Authorization": f"Bearer {access_token}"}
     user = requests.get(
         "https://discord.com/api/users/@me",
@@ -106,7 +105,7 @@ def callback():
     account_ts = ((user_id >> 22) + 1420070400000) / 1000
     days_old = (datetime.utcnow() - datetime.utcfromtimestamp(account_ts)).days
 
-    # --- Zapis do pliku/bazy ---
+    # Zapis
     db = load_data()
     verified_status = days_old >= 3
     db[state_token] = {
@@ -117,21 +116,23 @@ def callback():
     }
     save_data(db)
 
-    # --- Ustal dane do wyświetlenia ---
+    # Wygląd strony
     if verified_status:
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
         button_text = "Wejdź na serwer"
-        button_link = "https://discord.com/app"  # tu możesz wstawić własny link zaproszenia np. https://discord.gg/twojkod
+        button_link = "https://discord.gg/p8uyQxZ8YZ"  # Twoje zaproszenie
         sub_message = "Twoje konto jest wystarczająco stare. Witamy na pokładzie!"
+        auto_redirect = f'<meta http-equiv="refresh" content="5; url={button_link}">'
     else:
         status_text = "⛔ Twoje konto jest za młode!"
         status_color = "#d9534f"
         button_text = "Wróć na Discorda"
         button_link = "https://discord.com/app"
         sub_message = "Spróbuj ponownie za kilka dni, gdy konto będzie starsze."
+        auto_redirect = ""
 
-    # --- HTML ---
+    # HTML
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
@@ -139,6 +140,7 @@ def callback():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Weryfikacja Discord</title>
+        {auto_redirect}
         <style>
             body {{
                 margin: 0; padding: 0;
@@ -225,6 +227,5 @@ def status(user_id):
     db = load_data()
     return jsonify({"verified": db.get(user_id, {}).get("verified", False)})
 
-# Start lokalny
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

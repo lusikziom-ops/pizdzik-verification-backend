@@ -119,8 +119,8 @@ def callback():
     if verified_status:
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
-        button_text = "Wejdź na serwer"
-        button_link = "https://discord.gg/p8uyQxZ8YZ"
+        button_text = "Otwórz Discorda"
+        button_link = "https://discord.com/app"
         sub_message = "Twoje konto jest wystarczająco stare. Witamy na pokładzie!"
         auto_redirect = f'<meta http-equiv="refresh" content="8; url={button_link}">'
     else:
@@ -131,7 +131,7 @@ def callback():
         sub_message = "Spróbuj ponownie za kilka dni, gdy konto będzie starsze."
         auto_redirect = ""
 
-    # --- HTML ---
+    # HTML z gradientem i animacjami
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
@@ -141,28 +141,22 @@ def callback():
         <title>Weryfikacja Discord</title>
         {auto_redirect}
         <style>
+            @keyframes bgMove {{
+                0% {{ background-position: 0% 50%; }}
+                50% {{ background-position: 100% 50%; }}
+                100% {{ background-position: 0% 50%; }}
+            }}
             @keyframes fadeInUp {{
                 0% {{ opacity: 0; transform: translateY(30px); }}
                 100% {{ opacity: 1; transform: translateY(0); }}
-            }}
-            @keyframes pulse {{
-                0% {{ transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0.6); }}
-                50% {{ transform: scale(1.05); box-shadow: 0 0 20px {status_color}; }}
-                100% {{ transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0.6); }}
-            }}
-            @keyframes bgZoom {{
-                0% {{ background-size: 100%; }}
-                50% {{ background-size: 105%; }}
-                100% {{ background-size: 100%; }}
             }}
             body {{
                 margin: 0;
                 height: 100vh;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)),
-                            url('/static/nocne-rozkminy.jpg') center/cover no-repeat;
-                background-attachment: fixed;
-                animation: bgZoom 12s infinite ease-in-out;
+                background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+                background-size: 400% 400%;
+                animation: bgMove 12s ease infinite;
                 display: flex;
                 justify-content: center;
                 align-items: center;
@@ -173,23 +167,16 @@ def callback():
                 padding: 40px;
                 border-radius: 15px;
                 text-align: center;
-                box-shadow: 0 15px 40px rgba(0,0,0,0.7);
+                box-shadow: 0 15px 35px rgba(0,0,0,0.5);
                 max-width: 450px;
                 width: 90%;
                 backdrop-filter: blur(12px);
                 animation: fadeInUp 0.8s ease-out;
-                transition: transform 0.3s ease;
-            }}
-            .card:hover {{
-                transform: translateY(-5px) scale(1.02);
             }}
             h1 {{
                 color: {status_color};
                 margin-bottom: 15px;
                 font-size: 2.2em;
-                background: linear-gradient(90deg, {status_color}, #ffffff);
-                -webkit-background-clip: text;
-                color: transparent;
             }}
             p {{
                 font-size: 1.1em;
@@ -198,27 +185,30 @@ def callback():
             }}
             .button {{
                 display: block;
-                background: {status_color};
+                background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+                background-size: 200% auto;
+                color: white;
                 padding: 14px 25px;
                 font-size: 1.1em;
-                border-radius: 8px;
-                color: #fff;
+                border-radius: 50px;
                 text-decoration: none;
                 font-weight: bold;
                 margin: 10px auto;
                 max-width: 260px;
-                transition: transform 0.2s ease;
-                animation: pulse 2s infinite;
+                box-shadow: 0 0 15px rgba(59,173,227,0.6);
+                transition: all 0.4s ease;
             }}
             .button:hover {{
-                transform: scale(1.08);
+                transform: scale(1.07);
+                box-shadow: 0 0 25px rgba(59,173,227,0.9);
             }}
             .button-secondary {{
-                background: #666;
-                animation: none;
+                background: linear-gradient(90deg, #757f9a, #d7dde8);
+                color: #000;
             }}
             .button-secondary:hover {{
-                background: #888;
+                transform: scale(1.05);
+                box-shadow: 0 0 20px rgba(200,200,200,0.8);
             }}
             .hint {{
                 margin-top: 15px;

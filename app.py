@@ -33,7 +33,6 @@ def save_data(data):
 # === APP ===
 app = Flask(__name__, static_url_path='/static')
 
-# Serwowanie statycznych (np. tła)
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
@@ -121,9 +120,9 @@ def callback():
         status_text = "✅ Weryfikacja zakończona!"
         status_color = "#4CAF50"
         button_text = "Wejdź na serwer"
-        button_link = "https://discord.gg/p8uyQxZ8YZ"  # Twoje zaproszenie
+        button_link = "https://discord.gg/p8uyQxZ8YZ"
         sub_message = "Twoje konto jest wystarczająco stare. Witamy na pokładzie!"
-        auto_redirect = f'<meta http-equiv="refresh" content="5; url={button_link}">'
+        auto_redirect = f'<meta http-equiv="refresh" content="8; url={button_link}">'
     else:
         status_text = "⛔ Twoje konto jest za młode!"
         status_color = "#d9534f"
@@ -132,7 +131,7 @@ def callback():
         sub_message = "Spróbuj ponownie za kilka dni, gdy konto będzie starsze."
         auto_redirect = ""
 
-    # HTML
+    # --- HTML ---
     html = f"""
     <!DOCTYPE html>
     <html lang="pl">
@@ -142,32 +141,55 @@ def callback():
         <title>Weryfikacja Discord</title>
         {auto_redirect}
         <style>
+            @keyframes fadeInUp {{
+                0% {{ opacity: 0; transform: translateY(30px); }}
+                100% {{ opacity: 1; transform: translateY(0); }}
+            }}
+            @keyframes pulse {{
+                0% {{ transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0.6); }}
+                50% {{ transform: scale(1.05); box-shadow: 0 0 20px {status_color}; }}
+                100% {{ transform: scale(1); box-shadow: 0 0 0 rgba(255,255,255,0.6); }}
+            }}
+            @keyframes bgZoom {{
+                0% {{ background-size: 100%; }}
+                50% {{ background-size: 105%; }}
+                100% {{ background-size: 100%; }}
+            }}
             body {{
-                margin: 0; padding: 0;
+                margin: 0;
                 height: 100vh;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)),
+                background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)),
                             url('/static/nocne-rozkminy.jpg') center/cover no-repeat;
+                background-attachment: fixed;
+                animation: bgZoom 12s infinite ease-in-out;
                 display: flex;
                 justify-content: center;
                 align-items: center;
                 color: #fff;
             }}
             .card {{
-                background: rgba(255, 255, 255, 0.1);
+                background: rgba(255, 255, 255, 0.12);
                 padding: 40px;
                 border-radius: 15px;
                 text-align: center;
-                box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-                max-width: 400px;
+                box-shadow: 0 15px 40px rgba(0,0,0,0.7);
+                max-width: 450px;
                 width: 90%;
-                backdrop-filter: blur(10px);
-                animation: fadeIn 0.6s ease-out;
+                backdrop-filter: blur(12px);
+                animation: fadeInUp 0.8s ease-out;
+                transition: transform 0.3s ease;
+            }}
+            .card:hover {{
+                transform: translateY(-5px) scale(1.02);
             }}
             h1 {{
                 color: {status_color};
                 margin-bottom: 15px;
-                font-size: 2em;
+                font-size: 2.2em;
+                background: linear-gradient(90deg, {status_color}, #ffffff);
+                -webkit-background-clip: text;
+                color: transparent;
             }}
             p {{
                 font-size: 1.1em;
@@ -175,6 +197,7 @@ def callback():
                 opacity: 0.95;
             }}
             .button {{
+                display: block;
                 background: {status_color};
                 padding: 14px 25px;
                 font-size: 1.1em;
@@ -182,20 +205,25 @@ def callback():
                 color: #fff;
                 text-decoration: none;
                 font-weight: bold;
-                display: inline-block;
-                transition: all 0.2s ease;
+                margin: 10px auto;
+                max-width: 260px;
+                transition: transform 0.2s ease;
+                animation: pulse 2s infinite;
             }}
             .button:hover {{
-                transform: scale(1.05);
+                transform: scale(1.08);
+            }}
+            .button-secondary {{
+                background: #666;
+                animation: none;
+            }}
+            .button-secondary:hover {{
+                background: #888;
             }}
             .hint {{
                 margin-top: 15px;
                 font-size: 0.9em;
                 opacity: 0.8;
-            }}
-            @keyframes fadeIn {{
-                from {{opacity: 0; transform: translateY(10px);}}
-                to {{opacity: 1; transform: translateY(0);}}
             }}
         </style>
         <script>
@@ -205,6 +233,10 @@ def callback():
                     document.getElementById("inapp-hint").style.display = "block";
                 }}
             }});
+            function zamknijStrone() {{
+                window.close();
+                window.location.href = "https://discord.com/app";
+            }}
         </script>
     </head>
     <body>
@@ -213,6 +245,7 @@ def callback():
             <p>{sub_message}</p>
             <p>Twoje konto ma {days_old} dni.</p>
             <a href="{button_link}" class="button">{button_text}</a>
+            <a href="javascript:void(0)" onclick="zamknijStrone()" class="button button-secondary">❌ Zamknij stronę</a>
             <div id="inapp-hint" class="hint" style="display:none;">
                 ℹ️ Jeśli widzisz pasek Discorda, kliknij ⋮ i wybierz <b>"Otwórz w przeglądarce"</b>.
             </div>

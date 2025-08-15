@@ -127,8 +127,8 @@ def callback():
     status_color = "#4CAF50" if verified_status else "#ff5252"
     sub_message = "🎉 Witamy na pokładzie!" if verified_status else "Spróbuj ponownie za kilka dni."
 
-    # --- HTML jako zwykły string (nie f-string) ---
-    html = """
+    # --- HTML jako f-string ---
+    html = f"""
     <!DOCTYPE html>
     <html lang="pl">
     <head>
@@ -136,49 +136,48 @@ def callback():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Weryfikacja Discord</title>
         <style>
-            html, body {margin: 0; padding: 0; height: 100%; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden;}
-            body {
+            html, body {{margin: 0; padding: 0; height: 100%; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden;}}
+            body {{
                 background: linear-gradient(135deg, #020024, #090979, #000000);
                 background-size: 400% 400%;
                 animation: bgMove 30s ease infinite;
-            }
-            @keyframes bgMove {0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
-            #stars {position: fixed; top:0; left:0; width:100%; height:100%; z-index:-2;}
-            .card {position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            }}
+            @keyframes bgMove {{0%{{background-position:0% 50%;}}50%{{background-position:100% 50%;}}100%{{background-position:0% 50%;}}}}
+            #stars {{position: fixed; top:0; left:0; width:100%; height:100%; z-index:-2;}}
+            .card {{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
                 background:rgba(0,0,0,0.4); padding:40px; border-radius:15px; text-align:center;
                 box-shadow:0 15px 35px rgba(0,0,0,0.7); max-width:450px; width:90%;
-                backdrop-filter:blur(8px);}
-            h1 {color:%s; font-size:2em; margin-bottom:15px;}
-            p {font-size:1.1em; margin-bottom:20px;}
-            .button {display:block; background:linear-gradient(90deg, #00d2ff, #3a7bd5); color:white;
+                backdrop-filter:blur(8px);}}
+            h1 {{color:{status_color}; font-size:2em; margin-bottom:15px;}}
+            p {{font-size:1.1em; margin-bottom:20px;}}
+            .button {{display:block; background:linear-gradient(90deg, #00d2ff, #3a7bd5); color:white;
                 padding:14px 25px; border-radius:50px; text-decoration:none; font-weight:bold;
-                margin:10px auto; max-width:260px; box-shadow:0 0 15px rgba(59,173,227,0.6);}
-            .button-secondary {background:linear-gradient(90deg, #757f9a, #d7dde8); color:black;}
+                margin:10px auto; max-width:260px; box-shadow:0 0 15px rgba(59,173,227,0.6);}}
+            .button-secondary {{background:linear-gradient(90deg, #757f9a, #d7dde8); color:black;}}
         </style>
     </head>
     <body>
         <canvas id="stars"></canvas>
         <div class="card">
-            <h1>%s</h1>
-            <p>%s</p>
-            <p>Twoje konto ma %d dni.</p>
+            <h1>{status_text}</h1>
+            <p>{sub_message}</p>
+            <p>Twoje konto ma {days_old} dni.</p>
             <a href="https://discord.com/app" class="button">Otwórz Discorda</a>
             <a href="javascript:void(0)" onclick="window.close();window.location.href='https://discord.com/app';" class="button button-secondary">❌ Zamknij stronę</a>
         </div>
         <script>
             const c=document.getElementById('stars'),ctx=c.getContext('2d');
             let stars=[],num=150;
-            function resize(){c.width=innerWidth;c.height=innerHeight;}resize();window.onresize=resize;
-            for(let i=0;i<num;i++)stars.push({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.5,s:Math.random()*0.3+0.05,a:Math.random(),t:Math.random()*0.05+0.02});
-            function draw(){ctx.clearRect(0,0,c.width,c.height);stars.forEach(s=>{ctx.beginPath();ctx.globalAlpha=s.a;ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='white';ctx.fill();});ctx.globalAlpha=1;}
-            function update(){stars.forEach(s=>{s.y+=s.s;if(s.y>c.height){s.x=Math.random()*c.width;s.y=0;}s.a+=s.t*(Math.random()>.5?1:-1);if(s.a<0.1)s.a=0.1;if(s.a>1)s.a=1;});}
-            (function anim(){draw();update();requestAnimationFrame(anim);})();
-            setTimeout(()=>{window.close();window.location.href='https://discord.com/app';},10000);
+            function resize(){{c.width=innerWidth;c.height=innerHeight;}}resize();window.onresize=resize;
+            for(let i=0;i<num;i++)stars.push({{x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.5,s:Math.random()*0.3+0.05,a:Math.random(),t:Math.random()*0.05+0.02}});
+            function draw(){{ctx.clearRect(0,0,c.width,c.height);stars.forEach(s=>{{ctx.beginPath();ctx.globalAlpha=s.a;ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle='white';ctx.fill();}});ctx.globalAlpha=1;}}
+            function update(){{stars.forEach(s=>{{s.y+=s.s;if(s.y>c.height){{s.x=Math.random()*c.width;s.y=0;}}s.a+=s.t*(Math.random()>.5?1:-1);if(s.a<0.1)s.a=0.1;if(s.a>1)s.a=1;}});}}
+            (function anim(){{draw();update();requestAnimationFrame(anim);}})();
+            setTimeout(()=>{{window.close();window.location.href='https://discord.com/app';}},10000);
         </script>
     </body>
     </html>
-    """ % (status_color, status_text, sub_message, days_old)
-
+    """
     return html
 
 @app.route("/status/<user_id>")

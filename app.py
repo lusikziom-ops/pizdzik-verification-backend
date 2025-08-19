@@ -1,10 +1,12 @@
 import os
 import json
+import ipaddress
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from flask import Flask, request, redirect, jsonify, send_from_directory, make_response
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import requests
 import psycopg2
@@ -18,6 +20,7 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 BACKEND_URL = (os.getenv("BACKEND_URL") or "").rstrip("/")
 DATABASE_URL = os.getenv("DATABASE_URL")
+TRUST_PROXY = (os.getenv("TRUST_PROXY") or "1").strip().lower() in ("1", "true", "yes", "y", "t")
 
 if not CLIENT_ID or not CLIENT_SECRET or not BACKEND_URL or not DATABASE_URL:
     raise RuntimeError("❌ Brak wymaganych zmiennych środowiskowych: CLIENT_ID, CLIENT_SECRET, BACKEND_URL, DATABASE_URL")
@@ -104,6 +107,9 @@ init_db()
 
 # === Flask app ===
 app = Flask(__name__, static_url_path="/static")
+if TRUST_PROXY:
+    # ufaj 1 warstwie proxy (X-Forwarded-For, X-Forwarded-Proto)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 @app.after_request
 def security_headers(resp):
@@ -122,6 +128,42 @@ def healthz():
 @app.route("/")
 def home():
     return "✅ Backend weryfikacji działa!", 200
+
+# --- Pobranie PEŁNEGO IP klienta (Cloudflare/Proxy-friendly) ---
+def _client_ip_full() -> str | None:
+    candidates: list[str | None] = []
+    # Priorytet: Cloudflare -> X-Real-IP -> pierwszy z X-Forwarded-For -> remote_addr
+    candidates.append(request.headers.get("CF-Connecting-IP"))
+    candidates.append(request.headers.get("X-Real-IP"))
+
+    xff = request.headers.get("X-Forwarded-For")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            candidates.append(parts[0])  # pierwszy = klient
+
+    candidates.append(request.remote_addr)
+
+    for raw in candidates:
+        if not raw:
+            continue
+        ip = raw
+
+        # Obsługa ewentualnych form "ip:port" lub "[ipv6]:port"
+        # IPv4: 1.2.3.4:5678
+        if ":" in ip and ip.count(":") == 1 and "." in ip:
+            host, _port = ip.split(":", 1)
+            ip = host
+        # IPv6: [2001:db8::1]:5678
+        if ip.startswith("[") and "]" in ip:
+            ip = ip[1:ip.index("]")]
+
+        try:
+            ipaddress.ip_address(ip)
+            return ip
+        except ValueError:
+            continue
+    return None
 
 # --- Pomocnicze: transakcyjna aktualizacja weryfikacji + ewentualna nagroda ---
 def update_verification_and_maybe_award(token: str, user_id: int, username: str, days_old: int, verified: bool, ip: str | None):
@@ -142,7 +184,7 @@ def update_verification_and_maybe_award(token: str, user_id: int, username: str,
                 prev = cur.fetchone()
                 prev_verified = bool(prev["verified"]) if prev else False
 
-                # UPSERT weryfikacji
+                # UPSERT weryfikacji (nie nadpisuj istniejącego IP NULL-em)
                 cur.execute("""
                     INSERT INTO verifications (token, discord_id, username, days_old, verified, ip, created_at, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s, now(), now())
@@ -151,7 +193,7 @@ def update_verification_and_maybe_award(token: str, user_id: int, username: str,
                         username   = EXCLUDED.username,
                         days_old   = EXCLUDED.days_old,
                         verified   = EXCLUDED.verified,
-                        ip         = EXCLUDED.ip,
+                        ip         = COALESCE(EXCLUDED.ip, verifications.ip),
                         updated_at = now();
                 """, (token, user_id, username, days_old, verified, ip))
 
@@ -176,12 +218,15 @@ def verify():
     if len(token) > 256:
         return "❌ Zbyt długi token", 400
 
+    ip_val = _client_ip_full()
     # Wstępna rejestracja tokenu (jeśli nie istnieje) – przydaje się do wczesnej diagnostyki
     db_exec("""
         INSERT INTO verifications (token, ip, created_at, updated_at)
         VALUES (%s, %s, now(), now())
-        ON CONFLICT (token) DO UPDATE SET ip = EXCLUDED.ip, updated_at = now();
-    """, (token, request.remote_addr), fetch=None)
+        ON CONFLICT (token) DO UPDATE SET
+            ip = COALESCE(EXCLUDED.ip, verifications.ip),
+            updated_at = now();
+    """, (token, ip_val), fetch=None)
 
     params = {
         "client_id": CLIENT_ID,
@@ -189,7 +234,6 @@ def verify():
         "response_type": "code",
         "scope": "identify",
         "state": token,
-        # "prompt": "consent",  # w razie potrzeby, jeśli chcesz wymuszać potwierdzenie
     }
     oauth_url = f"https://discord.com/api/oauth2/authorize?{urlencode(params)}"
     return redirect(oauth_url, code=302)
@@ -263,15 +307,16 @@ def callback():
 
     verified_status = days_old >= 3
 
-    # Transakcyjna aktualizacja + ewentualna nagroda
+    # Transakcyjna aktualizacja + ewentualna nagroda (z pełnym IP)
     try:
+        ip_val = _client_ip_full()
         update_verification_and_maybe_award(
             token=state_token,
             user_id=user_id,
             username=f"{username}",
             days_old=days_old,
             verified=verified_status,
-            ip=request.remote_addr,
+            ip=ip_val,
         )
     except Exception as e:
         return f"❌ Błąd zapisu do bazy: {e}", 500
@@ -342,7 +387,7 @@ def status_token(token):
         return jsonify({"ok": False, "reason": "not_found"}), 404
     return jsonify({"ok": True, "verified": bool(row["verified"]), "discord_id": row.get("discord_id"), "username": row.get("username"), "days_old": row.get("days_old"), "updated_at": str(row.get("updated_at"))})
 
-# Status po USER_ID (zachowuję kompatybilność – wcześniejsze API miało /status/<user_id>)
+# Status po USER_ID (kompatybilność wsteczna)
 @app.route("/status/user/<int:user_id>")
 def status_user(user_id: int):
     row = db_exec("""
